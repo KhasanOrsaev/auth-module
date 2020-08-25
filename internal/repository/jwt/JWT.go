@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
-	"github.com/jinzhu/gorm"
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 	"strings"
 )
 
@@ -69,12 +69,14 @@ func (c *JWT) Authorize(tokenString string, scopes []string)(bool, error) {
 	if err != nil {
 		return false, err
 	}
-	user := models.User{}
-	c.db.First(&user, id)
+	roles := models.Role{}
+	c.db.Model(&models.Role{}).Select("scopes").Joins("JOIN " + models.User{}.TableName() + " ON " +
+		models.User{}.TableName() + ".role_id="+models.Role{}.TableName()+".id and " + models.User{}.TableName() +
+		".id=?", id).First(&roles)
 	allowed := true
-	for scope := range scopes {
+	for _,scope := range scopes {
 		isFound := false
-		for i := range user.Role.Scopes {
+		for _,i := range roles.Scopes {
 			if scope == i {
 				isFound = true
 				break

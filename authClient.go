@@ -7,7 +7,8 @@ import (
 	"auth-module/internal/repository/jwt"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 )
 
@@ -56,7 +57,7 @@ func (client *AuthClient) Authorize(authHeader string, scopes []string) (bool, e
 }
 
 // NewUser create a new user
-func (client *AuthClient) NewUser(login, password string, roleID int) *models.User  {
+func (client *AuthClient) ApplyUser(login, password string, roleID int) *models.User  {
 	secret := basic.GenerateUserSecret(login,password)
 	role := models.Role{}
 	client.db.First(&role, roleID)
@@ -65,8 +66,13 @@ func (client *AuthClient) NewUser(login, password string, roleID int) *models.Us
 		PasswordHash: secret,
 		Role:         role,
 		Active:       true,
+		//CreatedAt: time.Now(),
 	}
-	client.db.Save(&user)
+
+	client.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "name"}, {Name: "password_hash"}},
+		DoUpdates: clause.AssignmentColumns([]string{"role", "active"}),
+	}).Create(&user)
 	return &user
 }
 

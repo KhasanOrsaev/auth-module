@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jinzhu/gorm"
 	"github.com/lib/pq"
+	"gorm.io/gorm"
 	"strings"
 )
 

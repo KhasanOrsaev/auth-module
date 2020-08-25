@@ -4,12 +4,12 @@ import (
 	"encoding/base64"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/jinzhu/gorm"
 	"github.com/lib/pq"
 	"github.com/magiconair/properties/assert"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 	"testing"
 	"time"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
 
@@ -24,8 +24,10 @@ func TestBasic_Authenticate(t *testing.T) {
 	rows := []string{"id","name", "password_hash", "role","created_at", "updated_at", "active"}
 	mock.ExpectQuery("SELECT \\* FROM \"auth_users\"").WillReturnRows(sqlmock.NewRows(rows).AddRow(id, login, secret,
 		nil, time.Now(),time.Now(),true))
-	gormDB, _ := gorm.Open("postgres", db)
-	client := Client(gormDB.LogMode(true))
+	gormDB, _ := gorm.Open(postgres.New(postgres.Config{
+		Conn: db,
+	}), &gorm.Config{})
+	client := Client(gormDB)
 	getID, err := client.Authenticate(token)
 	if err != nil {
 		t.Error(err)
@@ -45,8 +47,10 @@ func TestBasic_Authorize(t *testing.T) {
 		AddRow(1))
 	mock.ExpectQuery("SELECT scopes FROM \"auth_roles\"").WillReturnRows(sqlmock.NewRows([]string{"scopes"}).
 		AddRow(scopes))
-	gormDB, _ := gorm.Open("postgres", db)
-	client := Client(gormDB.LogMode(true))
+	gormDB, _ := gorm.Open(postgres.New(postgres.Config{
+		Conn: db,
+	}), &gorm.Config{})
+	client := Client(gormDB)
 	isAuthorized, err := client.Authorize(token,scopes)
 	if err != nil {
 		t.Error(err)
