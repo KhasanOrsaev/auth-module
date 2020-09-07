@@ -5,11 +5,17 @@ import (
 	"auth-module/internal/repository"
 	"auth-module/internal/repository/basic"
 	"auth-module/internal/repository/jwt"
+	"auth-module/internal/repository/password"
 	"errors"
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"strings"
+)
+
+const (
+	BearerType = 1
+	BasicType = 2
+	PasswordType = 3
+	NullType = 0
 )
 
 type AuthClient struct {
@@ -17,70 +23,73 @@ type AuthClient struct {
 	db *gorm.DB
 }
 // NewAuthClient create new auth client
-func NewAuthClient(db *gorm.DB, args ...string) (*AuthClient,error) {
+func NewAuthClient(db *gorm.DB, clientType int) (*AuthClient,error) {
 	client := AuthClient{}
 	client.db = db
-	if len(args)>0 {
-		if token := strings.Split(args[0], " "); len(token)>1 {
-			switch token[0] {
-			case "Bearer":
-				client.Client = jwt.Client(client.db)
-			case "Basic":
-				client.Client = basic.Client(client.db)
-			default:
-				return nil, errors.New("incorrect auth header")
-			}
-		} else {
-			switch args[0] {
-			case "Bearer":
-				client.Client = jwt.Client(client.db)
-			case "Basic":
-				client.Client = basic.Client(client.db)
-			default:
-				return nil, errors.New("incorrect auth header")
-			}
-		}
+	switch clientType {
+	case BearerType:
+		client.Client = jwt.Client(client.db)
+	case BasicType:
+		client.Client = basic.Client(client.db)
+	case PasswordType:
+		client.Client = password.Client(client.db)
+	case NullType:
+		client.Client = nil
+	default:
+		return nil, errors.New("incorrect auth header")
 	}
+
+
 	return &client, nil
 }
 
 //Authenticate Authenticate user
-func (client *AuthClient) Authenticate(authHeader string) (uuid.UUID, error) {
-	token := strings.Split(authHeader, " ")
-	return client.Client.Authenticate(token[1])
+func (client *AuthClient) Authenticate(args ...string) (uint, error) {
+	return client.Client.Authenticate(args...)
 }
 
 //Authorize Authorize user
-func (client *AuthClient) Authorize(authHeader string, scopes []string) (bool, error) {
-	token := strings.Split(authHeader, " ")
-	return client.Client.Authorize(token[1], scopes)
+func (client *AuthClient) Authorize(scopes []string, args ...string) (bool, error) {
+	return client.Client.Authorize(scopes, args...)
 }
 
-// NewUser create a new user
-func (client *AuthClient) ApplyUser(login, password string, roleID int) *models.User  {
+// ApplyUser create a new user or update
+func (client *AuthClient) ApplyUser(login, password string, roles []*models.Role) *models.User  {
 	secret := basic.GenerateUserSecret(login,password)
-	role := models.Role{}
-	client.db.First(&role, roleID)
 	user := models.User{
 		Name:         login,
 		PasswordHash: secret,
-		Role:         role,
+		Role:         roles,
 		Active:       true,
-		//CreatedAt: time.Now(),
 	}
-
 	client.db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "name"}, {Name: "password_hash"}},
 		DoUpdates: clause.AssignmentColumns([]string{"role", "active"}),
-	}).Create(&user)
+	}).Omit(clause.Associations).Create(&user)
 	return &user
 }
 
-// NewRole create a new role
-func (client *AuthClient) NewRole(roleName string, scopes []string) *models.Role  {
-	role := models.Role{Name: roleName, Scopes: scopes}
-	client.db.Save(&role)
+// ApplyRole create a new role or update
+func (client *AuthClient) ApplyRole(roleName string, scope string) *models.Role  {
+	role := models.Role{Name: roleName, Scope: scope}
+	client.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"scope", "updated_at"}),
+	}).Create(&role)
 	return &role
+}
+
+// ApplyGroup create a new group or update
+func (client *AuthClient) ApplyGroup(name string, roles []*models.Role) *models.Group {
+	group := models.Group{
+		Name:         name,
+		Role:         roles,
+	}
+	client.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"role"}),
+	}).Omit(clause.Associations).Create(&group)
+	return &group
 }
 
 func (client *AuthClient) GenerateToken(login, password string) (string,error) {

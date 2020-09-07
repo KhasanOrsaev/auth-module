@@ -1,45 +1,38 @@
-package basic
+package password
 
 import (
-	"encoding/base64"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/lib/pq"
-	"github.com/magiconair/properties/assert"
+	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"testing"
-	"time"
 )
 
-
-func TestBasic_Authenticate(t *testing.T) {
+func TestPassword_Authenticate(t *testing.T) {
 	db,mock,_ := sqlmock.New()
 	defer db.Close()
 	login := "user"
 	pass:= "pass"
 	id := uint(1)
-	token := base64.StdEncoding.EncodeToString([]byte(login + ":" + pass))
-	secret := GenerateUserSecret(login,pass)
-	rows := []string{"id","name", "password_hash", "role","created_at", "updated_at", "active"}
-	mock.ExpectQuery("SELECT \\* FROM \"auth_users\"").WillReturnRows(sqlmock.NewRows(rows).AddRow(id, login, secret,
-		nil, time.Now(),time.Now(),true))
+	rows := []string{"id", "active"}
+	mock.ExpectQuery("SELECT \\* FROM \"auth_users\"").WillReturnRows(sqlmock.NewRows(rows).AddRow(id,true))
 	gormDB, _ := gorm.Open(postgres.New(postgres.Config{
 		Conn: db,
 	}), &gorm.Config{})
 	client := Client(gormDB)
-	getID, err := client.Authenticate(token)
+	getID, err := client.Authenticate(login,pass)
 	if err != nil {
 		t.Error(err)
 	}
 	assert.Equal(t, getID, id)
 }
 
-func TestBasic_Authorize(t *testing.T) {
+func TestPassword_Authorize(t *testing.T) {
 	db,mock,_ := sqlmock.New()
 	defer db.Close()
 	login := "user"
 	pass:= "pass"
-	token := base64.StdEncoding.EncodeToString([]byte(login + ":" + pass))
 	scopes := pq.StringArray{"event:read"}
 	mock.ExpectQuery("SELECT \\* FROM \"auth_users\" WHERE").WillReturnRows(sqlmock.NewRows([]string{"id", "active"}).
 		AddRow(1, true))
@@ -51,7 +44,7 @@ func TestBasic_Authorize(t *testing.T) {
 		Conn: db,
 	}), &gorm.Config{})
 	client := Client(gormDB)
-	isAuthorized, err := client.Authorize(scopes,token)
+	isAuthorized, err := client.Authorize(scopes, login,pass)
 	if err != nil {
 		t.Error(err)
 	}

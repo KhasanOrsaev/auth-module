@@ -1,13 +1,13 @@
 package models
 
-import "github.com/lib/pq"
+import "gorm.io/gorm"
 
 var roleTableName = "auth_roles"
 
 type Role struct {
-	ID int
-	Name string
-	Scopes pq.StringArray `gorm:"type:json"`
+	gorm.Model
+	Name string `gorm:"unique"`
+	Scope string
 }
 
 func (Role) TableName() string {

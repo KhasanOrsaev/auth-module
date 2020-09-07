@@ -2,7 +2,6 @@ package jwt
 
 import (
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/postgres"
@@ -17,8 +16,8 @@ func init() {
 }
 
 var (
-	id = "8cb3e6b1-66a1-4aba-8774-f41a247f1383"
-	token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGNiM2U2YjEtNjZhMS00YWJhLTg3NzQtZjQxYTI0N2YxMzgzIn0.ZHWoBaVmhVnsUiQ1r3WN98s3AmVUSQLnue_k6oIR4Kg"
+	id = uint(1)
+	token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxfQ.VWEPoFGPKV8q5vcQefQy28zhVeLUZmjSj5SGoD1VQJI"
 )
 func TestJWT_Authenticate(t *testing.T) {
 	client := Client(nil)
@@ -26,23 +25,26 @@ func TestJWT_Authenticate(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, userID.String(), id)
+	assert.Equal(t, userID, id)
 }
 
 func TestJWT_Authorize(t *testing.T) {
 	db,mock,_ := sqlmock.New()
 	defer db.Close()
 
-	scopesHad := pq.StringArray{"user:read", "user:write"}
-	scopesWant := pq.StringArray{"user:read"}
-	rows := []string{"scopes"}
-	mock.ExpectQuery("SELECT scopes FROM \"auth_roles\" JOIN auth_users ").WillReturnRows(sqlmock.NewRows(rows).
-		AddRow(scopesHad))
+
+	scopesWant := pq.StringArray{"event:read"}
+	rows := []string{"id"}
+	mock.ExpectQuery("SELECT \\* FROM \"auth_users\"").WillReturnRows(sqlmock.NewRows(rows).AddRow(id))
+	mock.ExpectQuery("SELECT \\* FROM \"user_permissions\" WHERE \"user_permissions\"\\.\"user_id\" = ").
+		WillReturnRows(sqlmock.NewRows([]string{"role_id", "user_id"}).AddRow(1,1).AddRow(2,1))
+	mock.ExpectQuery("SELECT \\* FROM \"auth_roles\" WHERE \"auth_roles\".\"id\" IN").
+		WillReturnRows(sqlmock.NewRows([]string{"id","scope"}).AddRow(1,"event:read").AddRow(2,"event:write"))
 	gormDB, _ := gorm.Open(postgres.New(postgres.Config{
 		Conn: db,
 	}), &gorm.Config{})
 	client := Client(gormDB)
-	isAuthorized, err := client.Authorize(token,scopesWant)
+	isAuthorized, err := client.Authorize(scopesWant, token)
 	if err != nil {
 		t.Error(err)
 	}
@@ -52,18 +54,18 @@ func TestJWT_Authorize(t *testing.T) {
 func TestJWT_GenerateToken(t *testing.T) {
 	db,mock,_ := sqlmock.New()
 	defer db.Close()
-	id := uuid.New()
+	id := 1
 	rows := []string{"id","name", "password_hash", "role","created_at", "updated_at", "active"}
-	mock.ExpectQuery("SELECT \\* FROM \"auth_users\" WHERE \\(\"auth_users\"\\.\"name\" = \\$1\\)").
+	mock.ExpectQuery("SELECT \\* FROM \"auth_users\" WHERE \"auth_users\"\\.\"name\" = \\$1").
 		WillReturnRows(sqlmock.NewRows(rows).
 		AddRow(id,"test", "test", nil, time.Now(),time.Now(),true))
 	gormDB, _ := gorm.Open(postgres.New(postgres.Config{
 		Conn: db,
 	}), &gorm.Config{})
 	client := Client(gormDB)
-	token,err := client.GenerateToken("test","")
+	newToken,err := client.GenerateToken("test","")
 	if err != nil {
 		t.Error(err)
 	}
-	assert.NotEqual(t, "", token)
+	assert.Equal(t, newToken, token)
 }
