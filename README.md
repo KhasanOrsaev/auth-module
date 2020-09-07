@@ -7,12 +7,14 @@ users, groups and roles.
 Currently Auth module has support with basic/jwt/password authorization.
 
 ##Install
+
 Get module with command:
 ```go
 go get github.com/KhasanOrsaev/auth-module
 ```
  
 ##Quick start
+
 Before start using require to run a migration. You can do it on init.
 Example:
 ```go
@@ -38,6 +40,7 @@ func main()  {
 ``` 
 
 ##Usage
+
 Auth model has models:
 * User
 * Group
